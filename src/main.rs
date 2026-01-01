@@ -6,8 +6,8 @@ use rand::{Rng, rng};
 use raylib::prelude::*;
 use std::f32::consts::PI;
 
-pub const SCRN_WIDTH: usize = 900;
-pub const SCRN_HEIGHT: usize = 900;
+pub const SCRN_WIDTH: usize = 1000;
+pub const SCRN_HEIGHT: usize = 1000;
 pub const ROW_COUNT: usize = 50;
 pub const COL_COUNT: usize = 50;
 pub const TILE_WIDTH: usize = SCRN_WIDTH / ROW_COUNT;
@@ -25,7 +25,7 @@ pub struct ParticlesSOA {
 impl ParticlesSOA {
     pub fn new() -> Self {
         let mut positions = [Vector2::zero(); PARTICLES_COUNT];
-        let velocities = [Vector2::zero(); PARTICLES_COUNT];
+        let mut velocities = [Vector2::zero(); PARTICLES_COUNT];
         let accelerations = [Vector2::zero(); PARTICLES_COUNT];
 
         let mut r = rng();
@@ -37,6 +37,11 @@ impl ParticlesSOA {
                 x: frac_x * (SCRN_WIDTH as f32),
                 y: frac_y * (SCRN_HEIGHT as f32),
             };
+
+            let angle: f32 = r.random();
+            let angle = angle * 2.0 * PI;
+            let vel = Vector2::one().rotated(angle) * 20.0;
+            velocities[i] = vel;
         }
 
         Self {
@@ -54,6 +59,8 @@ fn main() {
         .title("Kesh")
         .build();
 
+    // rl.set_target_fps(60);
+
     let mut force_field: [Vector2; FIELD_LEN] = [Vector2::zero(); FIELD_LEN];
     let seed: u32 = rng().random();
     let perlin = Perlin::new(seed);
@@ -63,10 +70,12 @@ fn main() {
     let mut particles = ParticlesSOA::new();
     let mut hue = 0.0;
 
+    let mut i: usize = 0;
+
     while !rl.window_should_close() {
         let mut d = rl.begin_drawing(&thread);
 
-        // NOTE: Uncomment if you want to see the vector field
+        // Vector field visualization
         //
         // d.clear_background(Color::RAYWHITE);
         // for y in 0..ROW_COUNT {
@@ -89,14 +98,15 @@ fn main() {
         //     }
         // }
 
+        let bg_color = Color::BLACK;
+        // let color = color_from_hsv(hue, 1.0, 1.0);
+        let hair_color = Color::RED;
         if zoff == 0.0 {
-            d.clear_background(Color::BLACK);
+            d.clear_background(bg_color);
         }
 
-        // let color = color_from_hsv(hue, 1.0, 1.0);
         for i in 0..PARTICLES_COUNT {
-            d.draw_circle_v(particles.positions[i], 0.5, Color::RED.alpha(0.2));
-            // d.draw_circle_v(particles.positions[i], 0.5, color);
+            d.draw_circle_v(particles.positions[i], 0.7, hair_color.alpha(0.25));
         }
 
         // let fps = d.get_fps();
@@ -107,18 +117,28 @@ fn main() {
 
         const DZ: f64 = 0.01;
         zoff += DZ;
-        hue += 0.1;
+        hue += 0.2;
     }
 }
 
 fn update_particles(particles: &mut ParticlesSOA, force_field: &[Vector2; FIELD_LEN]) {
-    let dt = 0.1;
+    let dt = 0.2;
 
     for i in 0..PARTICLES_COUNT {
         let pos = particles.positions[i];
-        let x = (pos.x / SCRN_WIDTH as f32) * ((ROW_COUNT - 1) as f32);
-        let y = (pos.y / SCRN_HEIGHT as f32) * ((COL_COUNT - 1) as f32);
-        let index = (x + y * ROW_COUNT as f32) as usize;
+        let x = (pos.x / (SCRN_WIDTH as f32)) * (COL_COUNT as f32);
+        let y = (pos.y / (SCRN_HEIGHT as f32)) * (ROW_COUNT as f32);
+        let x = if x >= COL_COUNT as f32 {
+            COL_COUNT - 1
+        } else {
+            x as usize
+        };
+        let y = if y >= ROW_COUNT as f32 {
+            ROW_COUNT - 1
+        } else {
+            y as usize
+        };
+        let index = x + y * ROW_COUNT;
         particles.accelerations[i] += force_field[index] * dt;
 
         let acc = particles.accelerations[i];
@@ -152,7 +172,7 @@ fn update_particles(particles: &mut ParticlesSOA, force_field: &[Vector2; FIELD_
 
 fn update_force_field(field: &mut [Vector2; FIELD_LEN], perlin: &Perlin, z_off: f64) {
     const DX: f64 = 0.01;
-    const DY: f64 = 0.01;
+    const DY: f64 = DX;
 
     let mut y_off = 0.0;
     for y in 0..ROW_COUNT {
